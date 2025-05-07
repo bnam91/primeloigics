@@ -2,6 +2,17 @@ import tkinter as tk
 from tkinter import ttk
 import recall  # recall.py 모듈 임포트
 import shipping_self  # shipping_self.py 모듈 임포트
+import shutil
+import os
+from datetime import datetime
+import openpyxl
+from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
+from PyQt5.QtCore import QDate
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QTabWidget, QWidget, 
+                            QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, 
+                            QLineEdit, QPushButton, QTextEdit, QFileDialog,
+                            QDateEdit)
 
 class 프라임봇App(tk.Tk):
     def __init__(self):
@@ -175,22 +186,8 @@ class 프라임봇App(tk.Tk):
             
         elif 기능 == "입고요청":
             if "입고요청" not in self.frames:
-                입고요청_프레임 = tk.Frame(self.container)
-                입고요청_프레임.grid(row=0, column=0, sticky="nsew")
-                
-                # 페이지 제목
-                제목_프레임 = tk.Frame(입고요청_프레임, bg="#f0f0f0")
-                제목_프레임.pack(fill="x", pady=5)
-                
-                제목 = tk.Label(제목_프레임, text="입고요청", 
-                            font=("Helvetica", 12, "bold"), bg="#f0f0f0")
-                제목.pack(padx=20, pady=5)
-                
-                # 입고요청 화면 내용
-                내용 = tk.Label(입고요청_프레임, text="입고요청 기능은 아직 개발 중입니다.", font=("Helvetica", 12))
-                내용.pack(pady=100)
-                
-                self.frames["입고요청"] = 입고요청_프레임
+                # 새로 구현된 입고요청 화면 생성 함수 호출
+                self.frames["입고요청"] = self.create_stock_in_request_tab()
             
             self.상태_업데이트("입고요청 화면이 로드되었습니다.")
             self.frames["입고요청"].grid()
@@ -199,6 +196,107 @@ class 프라임봇App(tk.Tk):
     def 상태_업데이트(self, 메시지):
         """상태 메시지 업데이트"""
         self.상태_라벨.config(text=메시지)
+
+    def create_stock_in_request_tab(self):
+        stock_in_request_tab = tk.Frame(self.container)
+        stock_in_request_tab.grid(row=0, column=0, sticky="nsew")
+        
+        # 페이지 제목
+        제목_프레임 = tk.Frame(stock_in_request_tab, bg="#f0f0f0")
+        제목_프레임.pack(fill="x", pady=5)
+        
+        제목 = tk.Label(제목_프레임, text="입고요청서 생성", 
+                    font=("Helvetica", 12, "bold"), bg="#f0f0f0")
+        제목.pack(padx=20, pady=5)
+        
+        # 입력 폼 프레임
+        form_layout = tk.Frame(stock_in_request_tab)
+        form_layout.pack(fill="x", pady=20, padx=30)
+        
+        # 레이블과 입력 필드 함께 배치
+        tk.Label(form_layout, text="상품명:").grid(row=0, column=0, sticky="e", padx=5, pady=10)
+        self.product_name_input = tk.Entry(form_layout, width=40)
+        self.product_name_input.grid(row=0, column=1, sticky="w", padx=5, pady=10)
+        
+        tk.Label(form_layout, text="입고예정수량:").grid(row=1, column=0, sticky="e", padx=5, pady=10)
+        self.expected_quantity_input = tk.Entry(form_layout, width=20)
+        self.expected_quantity_input.grid(row=1, column=1, sticky="w", padx=5, pady=10)
+        
+        tk.Label(form_layout, text="입고예정일(YYYY-MM-DD):").grid(row=2, column=0, sticky="e", padx=5, pady=10)
+        self.expected_date_input = tk.Entry(form_layout, width=20)
+        self.expected_date_input.grid(row=2, column=1, sticky="w", padx=5, pady=10)
+        self.expected_date_input.insert(0, datetime.now().strftime("%Y-%m-%d"))
+        
+        # 버튼 프레임
+        button_frame = tk.Frame(stock_in_request_tab)
+        button_frame.pack(pady=20)
+        
+        # 버튼 추가
+        create_button = tk.Button(button_frame, text="입고요청서 생성", command=self.create_stock_in_request,
+                                 bg="#4CAF50", fg="white", font=("Helvetica", 10, "bold"), padx=15, pady=5)
+        create_button.pack()
+        
+        # 상태 메시지 표시용 라벨
+        self.stock_in_status_label = tk.Label(stock_in_request_tab, text="", fg="blue", font=("Helvetica", 10))
+        self.stock_in_status_label.pack(side="bottom", fill="x", pady=10)
+        
+        # 안내 메시지
+        info_frame = tk.Frame(stock_in_request_tab, bg="#f0f0f0", bd=1, relief="solid")
+        info_frame.pack(fill="x", padx=30, pady=20)
+        
+        info_text = """
+        입고요청서 사용 안내:
+        1. 상품명과 입고예정수량을 입력합니다.
+        2. 입고예정일은 YYYY-MM-DD 형식으로 입력합니다.
+        3. '입고요청서 생성' 버튼을 클릭하면 당일 날짜로 파일이 생성됩니다.
+        4. 생성된 파일명은 'YYMMDD_라라스토어_입고요청서.xlsx' 형식입니다.
+        """
+        
+        info_label = tk.Label(info_frame, text=info_text, justify="left", bg="#f0f0f0", padx=10, pady=10)
+        info_label.pack()
+        
+        return stock_in_request_tab
+
+    def create_stock_in_request(self):
+        product_name = self.product_name_input.get()
+        expected_quantity = self.expected_quantity_input.get()
+        expected_date = self.expected_date_input.get()
+        
+        if not product_name or not expected_quantity:
+            self.stock_in_status_label.config(text="상품명과 입고예정수량을 입력해주세요.")
+            return
+        
+        try:
+            # 현재 날짜로 파일명 생성
+            current_date = datetime.now().strftime("%y%m%d")
+            output_filename = f"{current_date}_라라스토어_입고요청서.xlsx"
+            
+            # 샘플 파일 경로 (이 파일이 프로젝트에 있어야 함)
+            sample_file = "form_sample\\(샘플)250306_라라스토어_입고요청서.xlsx"
+            
+            # 샘플 파일 복사
+            shutil.copy(sample_file, output_filename)
+            
+            # 엑셀 파일 열기
+            workbook = openpyxl.load_workbook(output_filename)
+            sheet = workbook.active
+            
+            # 입고예정일 입력 (D3)
+            sheet['D3'] = f"입고예정일: {expected_date}"
+            
+            # 상품명 입력 (B6)
+            sheet['B6'] = product_name
+            
+            # 입고예정수량 입력 (C6)
+            sheet['C6'] = expected_quantity
+            
+            # 파일 저장
+            workbook.save(output_filename)
+            
+            self.stock_in_status_label.config(text=f"입고요청서가 생성되었습니다: {output_filename}")
+            
+        except Exception as e:
+            self.stock_in_status_label.config(text=f"오류 발생: {str(e)}")
 
 # 메인 함수
 if __name__ == "__main__":
